@@ -1,0 +1,14 @@
+# php2shell (CVE-2026-109618 / CVE-2026-109619) - UNOFFICIAL, PROVISIONAL mitigation.
+# Blocca i POST multipart/form-data prima che raggiungano PHP.
+# ATTENZIONE: blocca anche gli upload legittimi e i form multipart. Usare SOLO
+# su percorsi che non ricevono upload. La vera soluzione e' aggiornare PHP.
+#
+# Perche' questa regex: PHP mette il Content-Type in minuscolo e lo tronca al primo
+# ';', ',' o spazio, poi cerca "boundary" in qualunque punto dell'header. Quindi
+# "multipart/form-data,boundary=x" per PHP E' multipart. La virgola va intercettata.
+# Usare %{HTTP:Content-Type} (header grezzo), NON %{CONTENT_TYPE}: quest'ultimo con
+# mod_rewrite spesso non matcha nulla.
+RewriteEngine On
+RewriteCond %{REQUEST_METHOD} ^(POST|PUT|PATCH)$ [NC]
+RewriteCond %{HTTP:Content-Type} ^[[:space:]]*multipart/form-data([;,[:space:]]|$) [NC]
+RewriteRule ^ - [F,L]

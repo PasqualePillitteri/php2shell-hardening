@@ -1,0 +1,9 @@
+# php2shell (CVE-2026-109618 / CVE-2026-109619) - UNOFFICIAL, PROVISIONAL.
+# Block multipart POST/PUT/PATCH except on upload routes. Put inside the site block.
+# Caddy named matchers AND their conditions. Adapt the upload paths to your app.
+@php2shell {
+    method POST PUT PATCH
+    header_regexp Content-Type (?i)^\s*multipart/form-data([;,\s]|$)
+    not path /upload /upload/* /api/upload /api/upload/*
+}
+respond @php2shell 403

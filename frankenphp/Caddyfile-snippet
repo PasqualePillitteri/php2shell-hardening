@@ -1,0 +1,8 @@
+# php2shell - FrankenPHP: disable session upload progress in the global frankenphp block.
+# UNOFFICIAL, PROVISIONAL. Real fix: update PHP.
+{
+    frankenphp {
+        php_ini session.upload_progress.enabled 0
+    }
+}
+# To also block multipart at the edge, use caddy/php2shell.caddyfile inside the site block.
