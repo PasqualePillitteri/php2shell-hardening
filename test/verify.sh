@@ -35,4 +35,4 @@ expect_passes  "POST json"                      -X POST -H 'Content-Type: applic
 
 echo
 echo "RESULT: $([ "$fail" -eq 0 ] && echo PASS || echo "FAIL ($fail)")  pass=$pass fail=$fail"
-exit $([ "$fail" -eq 0 ] && echo 0 || echo 1)
+[ "$fail" -eq 0 ]
