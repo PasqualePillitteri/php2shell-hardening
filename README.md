@@ -34,7 +34,10 @@ first. Packages with a backport keep the old version number.
 
 ## If you cannot update
 
-In order, from the strongest to the weakest.
+The risks, the cases where the flaws trigger and why a login or a missing upload form does
+not protect you are covered in
+[PHP2Shell, what to do if you can't update PHP](https://pasqualepillitteri.it/en/news/26241/php2shell-cant-update-php-legacy-apps).
+The steps below, in order, from the strongest to the weakest.
 
 1. Use a vendor package that contains the fix, or build from one of the backport branches above.
 2. Try the smallest jump to a supported branch in staging, with `error_reporting = E_ALL`.
@@ -201,6 +204,7 @@ branches that will not be patched, and re-check against the advisory.
 
 ## Read more on pasqualepillitteri.it
 
+- [PHP2Shell, what to do if you can't update PHP (legacy apps)](https://pasqualepillitteri.it/en/news/26241/php2shell-cant-update-php-legacy-apps)
 - [php2shell, block PHP attacks with Nginx and Apache before the patch](https://pasqualepillitteri.it/en/news/26086/php2shell-nginx-apache-rules-block-php-before-patch)
 - [PHP RCE flaws leak, patch arrives October 21](https://pasqualepillitteri.it/en/news/26058/php-rce-flaws-leak-patch-october-21)
 - [Drupal patches two critical RCE flaws, update before the exploits](https://pasqualepillitteri.it/en/news/25257/drupal-critical-rce-flaws-field-ui-entity-list)
