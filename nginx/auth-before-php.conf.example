@@ -1,0 +1,20 @@
+# php2shell: authentication and limits in front of PHP, for installs that cannot update.
+# Copy the parts you need into the server{} or location{} that serves the legacy app, edit
+# them, and test in staging. A request rejected here never reaches the PHP engine, so its
+# body is never parsed. A login written inside the application does not give this protection.
+
+# Option A: allow only known addresses (documentation range shown, replace it).
+# allow 203.0.113.0/24;
+# deny  all;
+
+# Option B: HTTP basic auth.
+# auth_basic           "restricted";
+# auth_basic_user_file /etc/nginx/.htpasswd;
+
+# Use satisfy any; to accept either option, and satisfy all; to require both.
+# satisfy any;
+
+# Request size limit. 8m suits an application without uploads (PHP suggests 32m if uploads
+# are needed). Nginx buffers the body by default and forwards it to PHP-FPM with a
+# Content-Length; check that fastcgi_request_buffering is not set to off.
+# client_max_body_size 8m;

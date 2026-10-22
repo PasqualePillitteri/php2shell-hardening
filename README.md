@@ -50,7 +50,8 @@ The steps below, in order, from the strongest to the weakest.
 
 ### Authentication before PHP
 
-Nginx, basic auth or an allow-list:
+Ready-to-edit files are in `nginx/auth-before-php.conf.example` and
+`apache/auth-before-php.conf.example`. In short, Nginx with basic auth or an allow-list:
 
 ```nginx
 location / {
@@ -90,6 +91,8 @@ where it is not needed. Test in staging.
 
 ### PHP settings
 
+The same lines, with comments, are in `php-fpm/pool-php2shell.conf`.
+
 Set them where the application cannot override them (`php_admin_value` and `php_admin_flag` in
 the FPM pool or in the Apache configuration), not with `ini_set()` or `.user.ini`, and restart
 every worker.
@@ -127,12 +130,17 @@ delete it.
   minus an upload-route allowlist
 - `nginx/php2shell-server-snippet.conf`: the `if` that returns 403, for `server{}`
 - `apache/.htaccess`: `mod_rewrite` rule that returns 403 on multipart POST, PUT and PATCH
-- `apache/modsecurity-php2shell.conf`: ModSecurity rule on the `PHP_SESSION_UPLOAD_PROGRESS` field
+- `apache/modsecurity-php2shell.conf`: ModSecurity rules on the `PHP_SESSION_UPLOAD_PROGRESS`
+  field and on malformed bodies, plus optional body limits and a multipart block
+- `apache/auth-before-php.conf.example`: IP allow-list or basic auth and request limits for Apache
+- `nginx/auth-before-php.conf.example`: IP allow-list or basic auth and body limit for Nginx
 - `cloudflare/custom-rule.md`: custom-rule expression, scoped, and what not to do
 - `caddy/php2shell.caddyfile`: matcher that returns 403 on multipart except upload routes
 - `frankenphp/Caddyfile-snippet`: disables session upload progress
 - `lighttpd/php2shell.conf`: multipart block, to scope per vhost
 - `php-fpm/99-php2shell.ini`: session hardening for `php.ini`
+- `php-fpm/pool-php2shell.conf`: the advisory settings as `php_admin_*` lines for an FPM pool
+- `test/verify.sh`: checks a running site, any web server, against the multipart block
 - `test/`: decision-table check and a self-contained Nginx container test
 
 ## Why multipart
@@ -176,6 +184,19 @@ Sources (PHP 8.4.26):
 - A WAF parses multipart differently from PHP. The ModSecurity rule is a layer, not a fix.
 - An empty error log does not prove the server is safe.
 
+## Check that it works
+
+After applying a rule, run the checker against staging. It sends empty POST and PUT
+requests and expects multipart (including the comma and upper-case variants) to be blocked,
+while GET, urlencoded and JSON requests pass.
+
+```bash
+bash test/verify.sh https://staging.example.test /upload
+```
+
+The second argument is an upload route that must keep working; leave it out if there is none.
+A blocked request answers 403, 400 or drops the connection (nginx `return 444`).
+
 ## Test
 
 ```bash
@@ -185,6 +206,9 @@ python3 test/test_logic.py
 # full Nginx container test (needs Docker)
 bash test/run-docker-test.sh
 ```
+
+The Apache, Caddy and lighttpd rules have no container test yet: check them with
+`test/verify.sh`.
 
 ## After the update
 

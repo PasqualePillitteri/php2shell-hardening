@@ -1,0 +1,20 @@
+# php2shell: authentication and limits in front of PHP, for installs that cannot update.
+# Put these in the vhost or in httpd.conf (not in .htaccess), edit them, and test in staging.
+# A request rejected here never reaches the PHP engine, so its body is never parsed. A login
+# written inside the application does not give this protection.
+
+<Location "/">
+    # Option A: allow only known addresses (documentation range shown, replace it).
+    Require ip 203.0.113.0/24
+
+    # Option B: HTTP basic auth. Replace Option A with these lines.
+    # AuthType Basic
+    # AuthName "restricted"
+    # AuthUserFile /etc/apache2/.htpasswd
+    # Require valid-user
+</Location>
+
+# Request limits. 8388608 bytes is 8 MB, enough for an application without uploads.
+# They do not cover the number of multipart parts or of headers inside a part.
+LimitRequestBody   8388608
+LimitRequestFields 50
