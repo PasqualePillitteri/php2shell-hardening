@@ -32,6 +32,52 @@ team published minimal source backports for people who build from source:
 Linux distributions and LTS vendors received the patches in advance, so check your vendor
 first. Packages with a backport keep the old version number.
 
+## Getting a fixed package
+
+### Ubuntu 20.04
+
+`php7.4` is fixed in `7.4.3-4ubuntu2.29+esm5`
+([USN-8948-2](https://ubuntu.com/security/notices/USN-8948-2)), available only with Ubuntu
+Pro. On 20.04 `php7.4` is in main, so the fix is in `esm-infra`. The free subscription is for
+personal use on up to 5 machines.
+
+On a machine that is not attached, the table printed by `pro status` lists the services that
+are available, not the ones that are active. Check `attached` in `pro status --format json`.
+
+If PHP 7.4 came from the ondrej PPA, its packages carry epoch `1:` (`1:7.4.33-20+ubuntu20.04.1`)
+and apt sees them as newer than Ubuntu's: it never moves to the ESM build on its own, so
+install the ESM versions explicitly. Extensions taken from the PPA (apcu, imagick and similar)
+come from other source packages with their own versions, so check each of them too. The PPA removed its focal packages in
+June 2025 and the downloads now return 404, so save what is installed before switching, or
+there is no way back:
+
+```bash
+apt install dpkg-repack
+dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 'php7.4*' | awk '$1 == "ii" { print $2 }' | xargs dpkg-repack
+```
+
+### ondrej/sury packages
+
+On 21 October `php7.4 1:7.4.33-31` was published for Debian 11, 12 and 13 and Ubuntu 22.04,
+24.04 and 26.04. Its changelog lists "Avoid state corruption via bailout" for CVE-2026-109618 and
+CVE-2026-109619, backported from 8.2.35. There is no such build for Ubuntu 20.04 or Debian 10.
+
+When you update from these repositories, upgrade only the packages built from the PHP source
+you run. Upgrading the PECL extension packages (`php8.2-apcu`, `php8.2-imagick`,
+`php8.2-memcache`) pulls in the `php-*` metapackages, which install PHP 8.5 and switch
+`/usr/bin/php` to it.
+
+```bash
+apt-get install --only-upgrade $(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package} ${source:Package}\n' | awk '$1 == "ii" && $3 == "php8.2" { print $2 }')
+# if /usr/bin/php has already moved
+update-alternatives --set php /usr/bin/php8.2
+```
+
+### Docker
+
+Images built `FROM php:8.1-fpm` or older tags will not get the fix: there is no upstream
+release for those branches. Move to an 8.2.35 or later tag, or build from a backport branch.
+
 ## If you cannot update
 
 The risks, the cases where the flaws trigger and why a login or a missing upload form does
@@ -39,14 +85,17 @@ not protect you are covered in
 [PHP2Shell, what to do if you can't update PHP](https://pasqualepillitteri.it/en/news/26241/php2shell-cant-update-php-legacy-apps).
 The steps below, in order, from the strongest to the weakest.
 
-1. Use a vendor package that contains the fix, or build from one of the backport branches above.
+1. Use a vendor package that contains the fix (see "Getting a fixed package"), or build from
+   one of the backport branches above.
 2. Try the smallest jump to a supported branch in staging, with `error_reporting = E_ALL`.
 3. Put authentication in front of PHP, so an unauthorized request is rejected before the
    engine reads its body. Application-level login does not help: PHP parses the request
    before your script runs.
 4. Limit request size at the edge and block multipart where it is not needed (the rules in
    this repository).
-5. Apply the PHP settings below.
+5. Apply the PHP settings below, with a memory cap outside PHP.
+
+Then check the server with `test/audit-server.sh` (see "Audit a server" below).
 
 ### Authentication before PHP
 
@@ -94,35 +143,163 @@ where it is not needed. Test in staging.
 The same lines, with comments, are in `php-fpm/pool-php2shell.conf`.
 
 Set them where the application cannot override them (`php_admin_value` and `php_admin_flag` in
-the FPM pool or in the Apache configuration), not with `ini_set()` or `.user.ini`, and restart
-every worker.
+the FPM pool or in the Apache configuration), not with `ini_set()` or `.user.ini`, and reload
+PHP-FPM so every worker is recreated. Set `process_control_timeout` first (next section), or
+the reload drops the requests in flight.
 
 ```ini
 ; PHP-FPM pool
 php_admin_value[memory_limit] = -1
 php_admin_value[post_max_size] = 8M
+php_admin_value[max_input_nesting_level] = 32
 php_admin_flag[session.upload_progress.enabled] = off
 ; PHP 8.5 only
 php_admin_flag[fatal_error_backtraces] = off
-; optional, costs performance: the worker is recreated after every request
-pm.max_requests = 1
+; workers are recycled after 500 requests instead of never
+pm.max_requests = 500
+; stronger, costs performance: the worker is recreated after every request
+;pm.max_requests = 1
 ```
 
 - `memory_limit = -1` removes the limit an attacker could trip on purpose, but an underlying
   allocation failure can still reach the vulnerable path. Pair it with a container or cgroup
-  limit that kills only the affected worker.
+  limit that kills only the affected worker (see "Memory cap with systemd").
 - Do not use `RLIMIT_AS` or `RLIMIT_DATA` (`ulimit -v`) as a memory cap. They make `mmap()`
   fail, which is the failure that triggers the vulnerable path.
 - `post_max_size = 8M` is for applications without uploads. If uploads are needed PHP suggests
   32M, with `upload_max_filesize` below it.
 - `session.upload_progress.enabled = off` blocks the confirmed session paths and not other
   variants. Keep it off after the update if you do not use the feature.
+- `pm.max_requests` defaults to 0, so a worker and its state can live until the next reload.
+  500 bounds that at almost no cost. The advisory suggests 1 if performance allows; neither
+  removes the condition.
+- The advisory asks for a lower `max_input_nesting_level` than the default 64.
 - Remove or fix settings that emit diagnostics before initialization, and fix fatal errors
   and execution timeouts an attacker can reach. Hiding messages with `error_reporting`,
-  `display_errors` or `@` does not help.
+  `display_errors` or `@` does not help. See "Values passed to PHP per request" and
+  "Startup warnings" below.
 
 Verify values from the web SAPI with a temporary `phpinfo()` page, not from the CLI, then
 delete it.
+
+### Reloading PHP-FPM without dropping requests
+
+With the default `process_control_timeout = 0` a reload sends SIGQUIT and then SIGTERM to every
+worker at once: the requests in flight are cut and nginx answers 502. On a busy site that is
+hundreds of failed requests for each reload. Give the workers time to finish, in the `[global]`
+section of `php-fpm.conf`, above the `include=` line (`php-fpm/global-php2shell.conf`):
+
+```ini
+[global]
+process_control_timeout = 10s
+```
+
+Added at the end of the file, after `include=`, the line is read as part of the last pool and
+FPM refuses the configuration with `unknown entry 'process_control_timeout'`. The reload that
+applies the setting still runs with the old value, because the master stops the workers before
+it re-reads its configuration, so do that first reload at a quiet moment. Test before every
+reload:
+
+```bash
+php-fpm7.4 -t && systemctl reload php7.4-fpm
+```
+
+### Memory cap with systemd
+
+`memory_limit = -1` needs a cap outside PHP. With systemd, a drop-in on the FPM unit sets it
+(`systemd/php-fpm-memory.conf`):
+
+```ini
+# /etc/systemd/system/php7.4-fpm.service.d/php2shell-memory.conf
+[Service]
+MemoryMax=2G
+MemorySwapMax=0
+MemoryLimit=2G
+OOMPolicy=continue
+Restart=on-failure
+```
+
+- Check the current usage first with `systemctl show -p MemoryCurrent php7.4-fpm` and size the
+  cap above it. A cap below the usage makes the kernel reclaim and kill right away.
+- Apply it without a restart with
+  `systemctl set-property --runtime php7.4-fpm.service MemoryMax=2G MemorySwapMax=0`
+  (`MemoryLimit=2G` on cgroup v1), then `systemctl daemon-reload` for the drop-in.
+  `OOMPolicy=` cannot be set with `set-property`; `daemon-reload` applies it to the running
+  service.
+- `MemoryMax=` and `MemorySwapMax=` are for cgroup v2, `MemoryLimit=` for cgroup v1.
+  `stat -fc %T /sys/fs/cgroup` prints `cgroup2fs` on v2. There, drop `MemoryLimit=`: systemd
+  252 and later log it as deprecated.
+- With the default `OOMPolicy=stop` on cgroup v2, the first time the kernel kills a worker for
+  memory systemd stops the whole service, every pool with it. `continue` keeps it running and
+  the master starts a new worker. On cgroup v1 systemd does not see OOM kills, and systemd
+  older than 243 (Debian 10, CentOS 8) ignores the line.
+- Without `MemorySwapMax=0` the pool goes to swap at the cap and a runaway worker is not
+  killed until swap runs out.
+- The kernel kills one process, normally the largest worker, but the advisory warns that the
+  master can go too. `Restart=on-failure` brings the service back in that case.
+
+On systemd 252 with cgroup v2, one worker killed under `OOMPolicy=stop` left the unit failed
+with `oom-kill`; under `continue` only that request got a 502.
+
+### Values passed to PHP per request
+
+On FPM, INI values sent by the web server with each request (`PHP_VALUE` and
+`PHP_ADMIN_VALUE`) are applied before the request starts; the advisory for CVE-2026-109619
+names them as the FPM path when one of them produces a diagnostic. Pool values and `.user.ini`
+do not behave that way. Find them and move the settings into the pool:
+
+```bash
+nginx -T 2>/dev/null | grep -E 'fastcgi_param\s+PHP_(ADMIN_)?VALUE'
+grep -rnE 'PHP_(ADMIN_)?VALUE' /etc/apache2 /etc/httpd 2>/dev/null
+```
+
+With mod_php the same holds for `php_value` and `php_flag` in `.htaccess` and in the Apache
+configuration. mod_php is also where the full exploit was shown, so make sure it is not loaded
+even where Apache is stopped and FPM does the work: a later start of Apache brings it back.
+
+```bash
+apachectl -M 2>/dev/null | grep -i php    # reads the configuration, works with Apache stopped
+a2dismod php7.4                           # Debian, Ubuntu
+```
+
+On RHEL and CentOS the module is loaded by `/etc/httpd/conf.modules.d/15-php.conf`: comment
+out its `LoadModule` line.
+
+### Startup warnings
+
+The easiest diagnostics to find are the warnings PHP prints each time FPM starts or reloads.
+A common cause is `extension=` lines added to `php.ini` for modules the distribution already
+loads from `conf.d`:
+
+```
+PHP Warning:  PHP Startup: Unable to load dynamic library 'mysqli' (... undefined symbol: mysqlnd_global_stats)
+PHP Warning:  Module 'curl' already loaded
+```
+
+`mysqli` listed in `php.ini` loads before `mysqlnd` from `conf.d` and fails, and `curl` is
+loaded twice. These come from module startup, not from a request, so they are not the path
+the advisory describes. On a production server they came with short bursts of HTTP 500
+(`HeadersAlreadySentException` from the framework) right after a reload, and they bury the
+warnings that matter. Remove the duplicates and check that FPM starts clean:
+
+```bash
+php-fpm7.4 -m 2>&1 | grep -ciE 'warning|unable|already loaded'    # expect 0
+```
+
+### ISPConfig
+
+ISPConfig rewrites pool files and vhosts from its templates each time a site is saved in the
+panel, so lines added by hand to `pool.d/web*.conf` or to the vhost disappear. Put them where
+the panel keeps them:
+
+- PHP settings in the site's Options tab, "Custom php.ini settings". For PHP-FPM, ISPConfig
+  writes them into the pool as `php_admin_value` and `php_admin_flag`.
+- nginx rules in the same tab, "nginx Directives".
+- Settings for every site in a copy of the template under
+  `/usr/local/ispconfig/server/conf-custom/`, such as `php_fpm_pool.conf.master` or
+  `nginx_vhost.conf.master`. Compare it with the new template after each ISPConfig update.
+
+The `[global]` section of `php-fpm.conf` and the systemd drop-in are not managed by ISPConfig.
 
 ## What's here
 
@@ -139,7 +316,11 @@ delete it.
 - `frankenphp/Caddyfile-snippet`: disables session upload progress
 - `lighttpd/php2shell.conf`: multipart block, to scope per vhost
 - `php-fpm/99-php2shell.ini`: session hardening for `php.ini`
-- `php-fpm/pool-php2shell.conf`: the advisory settings as `php_admin_*` lines for an FPM pool
+- `php-fpm/pool-php2shell.conf`: the advisory settings as `php_admin_*` lines for an FPM pool,
+  with `pm.max_requests`
+- `php-fpm/global-php2shell.conf`: `process_control_timeout`, so a reload does not drop requests
+- `systemd/php-fpm-memory.conf`: drop-in with the memory cap and `OOMPolicy=continue`
+- `test/audit-server.sh`: read-only audit of a PHP-FPM server
 - `test/verify.sh`: checks a running site, any web server, against the multipart block
 - `test/`: decision-table check and a self-contained Nginx container test
 
@@ -196,6 +377,30 @@ bash test/verify.sh https://staging.example.test /upload
 
 The second argument is an upload route that must keep working; leave it out if there is none.
 A blocked request answers 403, 400 or drops the connection (nginx `return 444`).
+
+## Audit a server
+
+`test/audit-server.sh` runs on the server, as root, and changes nothing. It reads the effective
+configuration with `php-fpm -tt`, `nginx -T`, `apachectl -M` and `systemctl show`, for every
+PHP-FPM it finds (distribution packages, ISPConfig builds in `/opt/php-*`, Remi), and checks:
+
+- `memory_limit = -1`, `session.upload_progress.enabled` off and `pm.max_requests` above 0 as
+  `php_admin_*` in every pool
+- `process_control_timeout` above 0
+- no startup warnings from `php-fpm -m`
+- no `RLIMIT_AS` or `RLIMIT_DATA` on the running master and workers, and no `LimitAS=` or
+  `LimitDATA=` on the unit
+- `MemoryMax=` (`MemoryLimit=` on cgroup v1) and `OOMPolicy=continue` on the unit
+- no `PHP_VALUE` or `PHP_ADMIN_VALUE` passed by nginx or Apache
+- mod_php not loaded or enabled, and `php_value` in `.htaccess` when it is
+- no `client_max_body_size 0` in the nginx configuration
+
+```bash
+sudo bash test/audit-server.sh
+```
+
+Each line is PASS, WARN or SKIP, and the exit code is 1 if there is a WARN. The output names
+files, pools and settings of the server, so read it before you share it.
 
 ## Test
 
