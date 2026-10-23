@@ -453,6 +453,14 @@ release that fixes CVE-2026-115560 is out: the versions of 21 October do not con
 
 ## Detection
 
+Scanning is worth assuming. As of 23 October 2026 watchTowr reports exploitation attempts
+against its honeypots since 21 October, Amazon describes the flaws as broadly exploited and
+traced an attempt back to 17 October, before disclosure, and Cloudflare reports attack traffic
+against its customers. Huntress and CISA saw none on 21 October, no compromise has been
+confirmed publicly, and neither CVE is in the
+[CISA KEV catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) yet. Check
+the live catalog rather than this line.
+
 - PHP worker crashes (PHP-FPM or LiteSpeed's `lsphp`) with SIGSEGV or SIGABRT in the logs,
   especially close to multipart POSTs.
 - Access-log multipart POSTs carrying a `PHP_SESSION_UPLOAD_PROGRESS` field on routes that
