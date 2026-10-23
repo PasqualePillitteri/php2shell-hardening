@@ -2,7 +2,7 @@
 
 Unofficial edge rules that stop `multipart/form-data` requests before they reach PHP, as a
 stopgap for CVE-2026-109618 and CVE-2026-109619 ("php2shell") on installations that cannot
-be updated yet. Covers Nginx, Apache, ModSecurity, Caddy, lighttpd, FrankenPHP, Cloudflare and
+be updated yet. Covers Nginx, Apache, ModSecurity, Caddy, lighttpd, LiteSpeed, FrankenPHP, Cloudflare and
 `php.ini`, with a test suite. The `session.upload_progress` setting here is also the mitigation
 PHP asks for against CVE-2026-115560, a third issue published on 23 October 2026 that has no
 release yet.
@@ -343,6 +343,8 @@ The `[global]` section of `php-fpm.conf` and the systemd drop-in are not managed
 - `caddy/php2shell.caddyfile`: matcher that returns 403 on multipart except upload routes
 - `frankenphp/Caddyfile-snippet`: disables session upload progress
 - `lighttpd/php2shell.conf`: multipart block, to scope per vhost
+- `litespeed/php2shell.conf`: the same rewrite rule for LiteSpeed Enterprise and
+  OpenLiteSpeed, plus where the `lsphp` `php.ini` lives
 - `php-fpm/99-php2shell.ini`: session hardening for `php.ini`
 - `php-fpm/pool-php2shell.conf`: the advisory settings as `php_admin_*` lines for an FPM pool,
   with `pm.max_requests`
@@ -350,7 +352,9 @@ The `[global]` section of `php-fpm.conf` and the systemd drop-in are not managed
 - `systemd/php-fpm-memory.conf`: drop-in with the memory cap and `OOMPolicy=continue`
 - `test/audit-server.sh`: read-only audit of a PHP-FPM server
 - `test/verify.sh`: checks a running site, any web server, against the multipart block
+- `test/check-sync.py`: fails when the maps in the container test drift from the shipped ones
 - `test/`: decision-table check and a self-contained Nginx container test
+- `.github/workflows/test.yml`: runs all of the above on every push
 
 ## Why multipart
 
@@ -436,12 +440,18 @@ files, pools and settings of the server, so read it before you share it.
 # decision table, no server needed
 python3 test/test_logic.py
 
+# the container test and the shipped maps still agree
+python3 test/check-sync.py
+
 # full Nginx container test (needs Docker)
 bash test/run-docker-test.sh
 ```
 
-The Apache, Caddy and lighttpd rules have no container test yet: check them with
+The Apache, Caddy, lighttpd and LiteSpeed rules have no container test yet: check them with
 `test/verify.sh`.
+
+Every push runs the decision table, the shell syntax check, the drift check and the Nginx
+container test through `.github/workflows/test.yml`.
 
 ## After the update
 

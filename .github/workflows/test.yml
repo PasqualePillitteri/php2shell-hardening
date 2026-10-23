@@ -1,0 +1,20 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Decision table
+        run: python3 test/test_logic.py
+      - name: Shell syntax
+        run: |
+          for f in test/*.sh; do bash -n "$f"; done
+      - name: Test configuration matches the shipped maps
+        run: python3 test/check-sync.py
+      - name: Nginx container test
+        run: bash test/run-docker-test.sh

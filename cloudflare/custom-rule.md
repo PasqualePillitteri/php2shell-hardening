@@ -9,7 +9,11 @@ Dashboard: **Security -> WAF -> Custom rules**. Action: **Block**.
 ```
 (any(lower(http.request.headers["content-type"][*]) contains "multipart/form-data"))
 and (http.request.method in {"POST" "PUT" "PATCH"})
-and not (http.request.uri.path in {"/upload" "/api/upload" "/wp-admin/async-upload.php"})
+and not (
+  http.request.uri.path eq "/upload" or starts_with(http.request.uri.path, "/upload/")
+  or http.request.uri.path eq "/api/upload" or starts_with(http.request.uri.path, "/api/upload/")
+  or http.request.uri.path eq "/wp-admin/async-upload.php"
+)
 ```
 
 `contains "multipart/form-data"` also catches the comma variant
@@ -17,6 +21,11 @@ and not (http.request.uri.path in {"/upload" "/api/upload" "/wp-admin/async-uplo
 included because PHP 8.4's `request_parse_body()` parses multipart on those methods too.
 Adapt the upload-route allowlist to your app. This still blocks legitimate uploads on every
 other route.
+
+Use `eq` plus `starts_with()`, not `http.request.uri.path in {...}`: `in` matches the exact
+path only, so `/upload/image` would be blocked while the Nginx and Caddy rules let it through.
+`starts_with()` is anchored at the beginning of the path, so `/uploads-report` does not match
+`/upload/`, the same segment boundary the other rules use.
 
 ## Surgical (Enterprise, request-body inspection): block only the PoC field
 

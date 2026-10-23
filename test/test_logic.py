@@ -14,21 +14,21 @@ def blocked(method, ct, request_uri, uri=None):
     return f"{mp}{up}{ep}" == "100"
 MP = "multipart/form-data; boundary=ab"
 cases = [
-    (not blocked("GET",  "", "/"),                               "GET / non bloccato"),
-    (not blocked("POST", "application/x-www-form-urlencoded","/"),"POST urlencoded passa"),
-    (    blocked("POST", MP, "/"),                               "POST multipart / bloccato"),
-    (not blocked("POST", MP, "/upload"),                         "eccezione /upload esatto"),
-    (not blocked("POST", MP, "/upload/img"),                     "eccezione /upload/ subpath"),
-    (not blocked("POST", MP, "/upload?x=1"),                     "eccezione /upload?query"),
-    (    blocked("POST", MP, "/uploads-x"),                      "/uploads-x NON e' upload -> bloccato"),
-    (    blocked("POST", MP, "/uploader"),                       "/uploader NON e' upload -> bloccato"),
-    (    blocked("POST", "multipart/form-data,boundary=ab","/"), "variante VIRGOLA bloccata"),
+    (not blocked("GET",  "", "/"),                               "GET / not blocked"),
+    (not blocked("POST", "application/x-www-form-urlencoded","/"),"POST urlencoded passes"),
+    (    blocked("POST", MP, "/"),                               "POST multipart / blocked"),
+    (not blocked("POST", MP, "/upload"),                         "exception: exact /upload"),
+    (not blocked("POST", MP, "/upload/img"),                     "exception: /upload/ subpath"),
+    (not blocked("POST", MP, "/upload?x=1"),                     "exception: /upload?query"),
+    (    blocked("POST", MP, "/uploads-x"),                      "/uploads-x is NOT an upload route -> blocked"),
+    (    blocked("POST", MP, "/uploader"),                       "/uploader is NOT an upload route -> blocked"),
+    (    blocked("POST", "multipart/form-data,boundary=ab","/"), "COMMA variant blocked"),
     (    blocked("POST", "MULTIPART/FORM-DATA; boundary=ab","/"),"case-insensitive"),
-    (    blocked("PUT",  MP, "/"),                               "PUT multipart bloccato (8.4)"),
-    (    blocked("PATCH",MP, "/"),                               "PATCH multipart bloccato (8.4)"),
-    (not blocked("POST", "application/json","/"),                "JSON passa"),
-    # internal redirect to the error page: request_uri resta "/", uri diventa /error/403.html
-    (not blocked("POST", MP, "/", uri="/error/403.html"),        "redirect interno a /error/403.html NON ri-bloccato (niente ciclo 500)"),
+    (    blocked("PUT",  MP, "/"),                               "PUT multipart blocked (8.4)"),
+    (    blocked("PATCH",MP, "/"),                               "PATCH multipart blocked (8.4)"),
+    (not blocked("POST", "application/json","/"),                "JSON passes"),
+    # internal redirect to the error page: request_uri stays "/", uri becomes /error/403.html
+    (not blocked("POST", MP, "/", uri="/error/403.html"),        "internal redirect to /error/403.html NOT re-blocked (no 500 loop)"),
 ]
 fail = 0
 for ok, desc in cases:
