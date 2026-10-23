@@ -3,7 +3,9 @@
 Unofficial edge rules that stop `multipart/form-data` requests before they reach PHP, as a
 stopgap for CVE-2026-109618 and CVE-2026-109619 ("php2shell") on installations that cannot
 be updated yet. Covers Nginx, Apache, ModSecurity, Caddy, lighttpd, FrankenPHP, Cloudflare and
-`php.ini`, with a test suite.
+`php.ini`, with a test suite. The `session.upload_progress` setting here is also the mitigation
+PHP asks for against CVE-2026-115560, a third issue published on 23 October 2026 that has no
+release yet.
 
 These rules are provisional. They block legitimate uploads and multipart forms, so use them
 only on routes that do not need uploads and try them in staging first. The PHP project says
@@ -31,6 +33,30 @@ team published minimal source backports for people who build from source:
 [8.1](https://github.com/php/php-src/tree/PHP-8.1-CVE-2026-109618-109619).
 Linux distributions and LTS vendors received the patches in advance, so check your vendor
 first. Packages with a backport keep the old version number.
+
+### 23 October 2026: CVE-2026-115560
+
+Two days after the advisory PHP published a
+[note](https://www.php.net/index.php#2026-10-23-1) on a third RCE vector, CVE-2026-115560,
+again through session upload progress. There is no release for it: PHP calls the scenario
+unlikely, handles it in the normal bugfix cycle and will publish the full advisory with the
+next release. No affected-version list yet, and the patched versions of 21 October do not
+cover it.
+
+It needs three conditions at the same time:
+
+- `session.serialize_handler` set to `php_binary` or `php_serialize` in the configuration,
+- the application switching it to `php` with `ini_set()` before `session_start()`,
+- session upload progress still enabled.
+
+The mitigation is the one already in this repository, `session.upload_progress.enabled = 0`.
+If you applied it for CVE-2026-109619 on 21 October there is nothing else to do: keep it off
+until the next bugfix release. Applications that never change the serialize handler at runtime
+can leave the feature on, so check the code before deciding:
+
+```bash
+grep -rn --include='*.php' -E "ini_set\s*\(\s*['\"]session\.serialize_handler" /var/www
+```
 
 ## Getting a fixed package
 
@@ -169,7 +195,9 @@ pm.max_requests = 500
 - `post_max_size = 8M` is for applications without uploads. If uploads are needed PHP suggests
   32M, with `upload_max_filesize` below it.
 - `session.upload_progress.enabled = off` blocks the confirmed session paths and not other
-  variants. Keep it off after the update if you do not use the feature.
+  variants. It is also the only mitigation for CVE-2026-115560, which has no release yet, so
+  keep it off after the update unless you use the feature and your code never calls
+  `ini_set('session.serialize_handler', ...)`.
 - `pm.max_requests` defaults to 0, so a worker and its state can live until the next reload.
   500 bounds that at almost no cost. The advisory suggests 1 if performance allows; neither
   removes the condition.
@@ -419,6 +447,9 @@ The Apache, Caddy and lighttpd rules have no container test yet: check them with
 
 Update PHP to a patched release and remove these rules where you can. Keep them only for
 branches that will not be patched, and re-check against the advisory.
+
+Keep `session.upload_progress.enabled = off` even on a patched release until the bugfix
+release that fixes CVE-2026-115560 is out: the versions of 21 October do not contain that fix.
 
 ## Detection
 

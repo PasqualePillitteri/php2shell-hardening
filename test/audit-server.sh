@@ -113,7 +113,7 @@ check_fpm() {
     if [ "$upl" = unset ]; then
       bad=$((bad+1))
       if is_off "$upl_ini"; then warn "$fpm: pool $pool: session.upload_progress off only in php.ini, set php_admin_flag[session.upload_progress.enabled] = off"
-      else warn "$fpm: pool $pool: session.upload_progress.enabled is on"; fi
+      else warn "$fpm: pool $pool: session.upload_progress.enabled is on (CVE-2026-109619 and CVE-2026-115560)"; fi
     elif ! is_off "$upl"; then
       bad=$((bad+1)); warn "$fpm: pool $pool sets php_admin_flag[session.upload_progress.enabled] on"
     fi
