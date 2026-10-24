@@ -7,6 +7,10 @@ be updated yet. Covers Nginx, Apache, ModSecurity, Caddy, lighttpd, LiteSpeed, F
 PHP asks for against CVE-2026-115560, a third issue published on 23 October 2026 that has no
 release yet.
 
+If you run PHP 7.4, 8.0 or 8.1, look first for a vendor package with the fix: Ubuntu Pro for
+20.04, Red Hat and AlmaLinux for 8 and 9, cPanel and CloudLinux for hosting, or a build from the
+backport branches. Those packages keep the old version number, see "Getting a fixed package".
+
 These rules are provisional. They block legitimate uploads and multipart forms, so use them
 only on routes that do not need uploads and try them in staging first. The PHP project says
 that only an update is a complete fix, and that none of the configuration measures below
@@ -32,7 +36,9 @@ team published minimal source backports for people who build from source:
 [8.0](https://github.com/php/php-src/tree/PHP-8.0-CVE-2026-109618-109619),
 [8.1](https://github.com/php/php-src/tree/PHP-8.1-CVE-2026-109618-109619).
 Linux distributions and LTS vendors received the patches in advance, so check your vendor
-first. Packages with a backport keep the old version number.
+first. Several of them have already shipped the fix for the old branches (Ubuntu Pro for 20.04,
+RHEL and AlmaLinux, cPanel, CloudLinux, see below). Packages with a backport keep the old
+version number.
 
 ### 23 October 2026: CVE-2026-115560
 
@@ -60,12 +66,37 @@ grep -rn --include='*.php' -E "ini_set\s*\(\s*['\"]session\.serialize_handler" /
 
 ## Getting a fixed package
 
+A vendor backport is the upstream fix applied to the old code without a new PHP version. The
+package keeps its number, so `php -v` says nothing about whether the fix is there, and scanners
+that compare only versions report patched systems as vulnerable. Check the package changelog
+for the CVE instead; the commands are in each section.
+
 ### Ubuntu 20.04
 
 `php7.4` is fixed in `7.4.3-4ubuntu2.29+esm5`
 ([USN-8948-2](https://ubuntu.com/security/notices/USN-8948-2)), available only with Ubuntu
-Pro. On 20.04 `php7.4` is in main, so the fix is in `esm-infra`. The free subscription is for
-personal use on up to 5 machines.
+Pro. On 20.04 `php7.4` is in main, so the fix is in `esm-infra`. The same notice covers 18.04
+(`php7.2 7.2.24-0ubuntu0.18.04.17+esm14`, Pro) and 16.04 and 14.04 (`php7.0 ...+esm22`,
+`php5 ...+esm18`, Legacy Support add-on). Releases that are still supported get the fix without
+a subscription, from [USN-8948-1](https://ubuntu.com/security/notices/USN-8948-1): 22.04
+`php8.1 8.1.2-1ubuntu2.28`, 24.04 `php8.3 8.3.6-0ubuntu0.24.04.13`, 26.04
+`php8.5 8.5.4-0ubuntu1.5`. To check 20.04 after `pro attach` and `apt upgrade`:
+
+```bash
+dpkg -s php7.4-cli | grep ^Version    # 7.4.3-4ubuntu2.29+esm5 or later
+```
+
+The free Ubuntu Pro subscription covers up to 5 physical machines, with unlimited VMs and
+containers on them (50 for official Ubuntu community members). Canonical words the eligibility
+in different ways. [ubuntu.com/pro](https://ubuntu.com/pro) says personal use, the
+[2022 announcement](https://canonical.com/blog/ubuntu-pro-beta-release) and the
+[FAQ](https://discourse.ubuntu.com/t/ubuntu-pro-faq/34042) say personal and small-scale
+commercial use, and the [personal terms](https://canonical.com/legal/ubuntu-pro/personal) allow
+one account per company or legal entity, ask you to name the company when you register on its
+behalf and cap it at 5 physical systems. None of them says what happens with a machine that
+belongs to a client or an employer, so ask Canonical before relying on it for those. Going over
+the limit is not blocked, but Canonical counts the active machines, and `sudo pro detach` frees
+a slot.
 
 On a machine that is not attached, the table printed by `pro status` lists the services that
 are available, not the ones that are active. Check `attached` in `pro status --format json`.
@@ -98,6 +129,75 @@ apt-get install --only-upgrade $(dpkg-query -W -f='${db:Status-Abbrev} ${binary:
 # if /usr/bin/php has already moved
 update-alternatives --set php /usr/bin/php8.2
 ```
+
+### Debian
+
+Debian 12 has `php8.2 8.2.35-1~deb12u1` (DLA-4848-1) and Debian 13 `php8.4 8.4.27-1~deb13u1`
+(DSA-6574-1), as listed by the
+[Debian security tracker](https://security-tracker.debian.org/tracker/CVE-2026-109618). The
+tracker has no data for `php7.4` on Debian 11. A third-party summary reports a Freexian ELTS
+(paid extended support) advisory, ELA-1853-1, with `php7.4 7.4.33-1+deb11u14`; confirm it with
+Freexian before relying on it. The free alternative is the sury.org build above.
+
+### Red Hat, AlmaLinux and derivatives
+
+RHEL 8 has the fix in the `php:7.4` module,
+[RHSA-2026:87080](https://access.redhat.com/errata/RHSA-2026:87080), `php 7.4.33-8`, published
+on 21 October together with ten other CVEs. AlmaLinux announced the same day, on its
+[blog](https://almalinux.org/blog/), patched packages for every PHP stream on 8, 9 and 10. For
+RHEL 7 the [bulletin RHSB-2026-013](https://access.redhat.com/security/vulnerabilities/RHSB-2026-013)
+lists `session.upload_progress.enabled = 0` as the only change required. Check a package with:
+
+```bash
+rpm -q --changelog php-fpm | grep -E 'CVE-2026-10961[89]'
+```
+
+### Hosting panels
+
+CloudLinux, according to its
+[blog](https://blog.cloudlinux.com/php-cve-2026-109618-and-cve-2026-109619): `ea-php` 5.2 to
+8.5 fixed on 21 October at 20:55 UTC; `alt-php` 5.2 to 5.6, 7.0 to 7.4 and 8.0 to 8.5 in the
+stable repositories of CloudLinux 7, 8 and 9 by 00:07 UTC on 22 October; on CloudLinux 10 only
+5.2 is in the normal repository and the others come from the ELS repository, which has to stay
+enabled; CloudLinux 6 is not confirmed. Its security metadata was not published at that point,
+so `yum --security` does not list these packages: use a plain `dnf upgrade 'alt-php*'` or
+`'ea-php*'`, then restart PHP.
+
+```bash
+rpm -q --changelog alt-php74-common | grep -E 'CVE-2026-(109618|109619)'
+rpm -q --changelog ea-php74-php-cli | grep -E 'CVE-2026-(109618|109619)'
+```
+
+cPanel EasyApache 4 is reported to carry backports for `ea-php74`, `ea-php80` and `ea-php81`
+(`7.4.33-19`, `8.0.30-12`, `8.1.34-5`, EA-13613, EA-13612, EA-13611) by
+[ComputingForGeeks](https://computingforgeeks.com/patch-php2shell-cpanel-whm/), not by a cPanel
+note. `ea-php73` and older have no fix; TuxCare ELS is a paid option, and its CVE tracker says
+whether php2shell is covered. The Plesk and DirectAdmin forum threads of 21 October gave no
+date and did not name 7.4, 8.0 or 8.1, so ask the vendor or the host which package contains the
+fix and for the changelog line with CVE-2026-109618.
+
+### Building from a backport branch
+
+Without a vendor package, build from the branch of the PHP project. The 7.4 branch differs from
+the 7.4 code by one security commit dated 18 October 2026 (17 files, 240 lines added, 59
+removed), and the 8.0 and 8.1 branches work the same way. Reuse the options of the PHP you run
+(`php -i | grep 'Configure Command'`) and install into a separate prefix:
+
+```bash
+git clone --depth 1 --branch PHP-7.4-CVE-2026-109618-109619 https://github.com/php/php-src.git
+cd php-src
+git log -1 --format='%h %ad %s'
+./buildconf --force
+./configure --prefix=/opt/php-7.4-patched <options of the current PHP>
+make -j"$(nproc)"
+sudo make install
+```
+
+The branch has the two fixes and nothing else, and 7.4 has been out of support since
+November 2022, so other known flaws stay open and every later update is yours. Rebuild the PECL
+extensions with the `phpize` of the new prefix, point the FPM unit at the new binary, try it in
+staging with `error_reporting = E_ALL`, and keep the commit hash and the build log: `php -v`
+does not prove the patch.
 
 ### Docker
 
@@ -482,6 +582,7 @@ the live catalog rather than this line.
 
 ## Read more on pasqualepillitteri.it
 
+- [php2shell on PHP 7.4, the patch is in Ubuntu 20.04 Pro and web hosting](https://pasqualepillitteri.it/en/news/26862/php2shell-php-74-patch-ubuntu-20-04-pro-hosting)
 - [PHP2Shell, what to do if you can't update PHP (legacy apps)](https://pasqualepillitteri.it/en/news/26241/php2shell-cant-update-php-legacy-apps)
 - [php2shell, block PHP attacks with Nginx and Apache before the patch](https://pasqualepillitteri.it/en/news/26086/php2shell-nginx-apache-rules-block-php-before-patch)
 - [PHP RCE flaws leak, patch arrives October 21](https://pasqualepillitteri.it/en/news/26058/php-rce-flaws-leak-patch-october-21)
