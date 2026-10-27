@@ -152,6 +152,26 @@ lists `session.upload_progress.enabled = 0` as the only change required. Check a
 rpm -q --changelog php-fpm | grep -E 'CVE-2026-10961[89]'
 ```
 
+### GetPageSpeed Everpatch for EOL systems
+
+[GetPageSpeed Everpatch](https://www.getpagespeed.com/eol) publishes PHP2Shell-fixed
+packages for these older operating-system and PHP combinations:
+
+| Operating system | PHP branches | Architecture | Upgrade guide |
+| --- | --- | --- | --- |
+| CentOS 7 | 5.4, 5.6, 7.0-7.4, 8.0-8.4 | x86_64 | [CentOS 7](https://www.getpagespeed.com/server-setup/php/php2shell-on-centos-7) |
+| Ubuntu 20.04 | 7.4, 8.0-8.4 | amd64 | [Ubuntu and Debian](https://www.getpagespeed.com/server-setup/php/php2shell-on-ubuntu-debian) |
+| Ubuntu 18.04 | 7.2 | amd64 | [Ubuntu and Debian](https://www.getpagespeed.com/server-setup/php/php2shell-on-ubuntu-debian) |
+| Debian 10 | 7.3 | amd64 | [Ubuntu and Debian](https://www.getpagespeed.com/server-setup/php/php2shell-on-ubuntu-debian) |
+
+The guides cover package selection, in-place upgrades and restarting the affected PHP
+services. Coverage applies to PHP packages; operating-system maintenance remains separate.
+Personal, development and evaluation use is free. Commercial production requires
+[Ultra](https://www.getpagespeed.com/repo-subscribe#ultra-annual) for up to 10 servers
+running your own services, or [Fleet](https://www.getpagespeed.com/fleet-subscribe) for
+client servers you administer and larger fleets; see the
+[licensing terms](https://www.getpagespeed.com/terms#free-channels).
+
 ### Hosting panels
 
 CloudLinux, according to its
